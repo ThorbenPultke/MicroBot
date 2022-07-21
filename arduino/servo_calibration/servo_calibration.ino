@@ -1,84 +1,83 @@
-/*
-   The SUPER KNOB for 9G Servo Testing
-   Author : Paul Pavish
-   Purpose : To test and find the MIN_PULSE_WIDTH & MAX_PULSE_WIDTH of a 9G Servo
-              thereby attaining a complete 180 degree rotation
-   Released in  Youtube Channel : Paul Pavish
-                Video Topic     : The Problem with 9G Servos
-                Video Category  : Creator Fix
-                Code & blog URL : www.basicsexplained.com/creator/
-*/
-
-//Including required libraries
-
-#include<Servo.h>
-
-//Creating a Servo Object 's'
-
-Servo s;
-
-//Global Initialization
-
-//Analog Pins
-
-int Res_100 = A2;
-int Res_10 = A1;
-int Res_2 = A0;
-
-//Servo Pin
-
-const int Servo_Pin = 9;
-
-//Resolution variables
-
-int R_100, R_10, R_2;
-int Micros;
-int Pre_val;
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#define SERVO_FREQ 60 // Analog servos run at ~50 Hz updates
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+uint16_t selected_port = -1;
+uint16_t last_pwm = -1;
 
 void setup() {
 
-  //Initialize Serial Communication
-
   Serial.begin(9600);
+  Serial.println("Calibration for Servos. Default range [150-600] pwm");
 
-  //Attaching Servo object to Servo pin
+  pwm.begin();
+  pwm.setOscillatorFrequency(27000000);
+  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
 
-  s.attach(9, 400, 2600);
-
-}
-
-void Read_Knobs() {
-
-  R_100 = map(analogRead(Res_100), 0, 1023, 4, 26);
-  R_10 = map(analogRead(Res_10), 0, 1023, 0, 10);
-  R_2 = map(analogRead(Res_2), 0, 1023, -4, 4);
-}
-
-void Calc_Microsec() {
-
-  Micros = (R_100 * 100) + (R_10 * 10) + (R_2 * 2);
-
-}
-
-void Wait_for_new_val() {
-
-  while (Micros == Pre_val) {
-    Read_Knobs();
-    Calc_Microsec();
-  }
-
-  Pre_val = Micros;
-
+  delay(10);
+  Serial.println("Please enter the channel on which the servo is attached (pwm board): ");
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  while (Serial.available() == 0)
+  {
+  }
+  uint16_t Input = String(Serial.readString()).toInt();
+  if (selected_port == -1 and Input >= 0 and Input <= 16)
+  {
+    selected_port = Input;
+    Serial.print("Selected channel: ");
+    Serial.println(String(selected_port));
+    Serial.println("driving servo to expected zero-pose (pulse_length=375)");
+    pwm.setPWM(selected_port, 0, 375);
+    //pwm.writeMicroseconds(selected_port, microsec);
+    last_pwm = 375;
+  }
 
-  Read_Knobs();
-  Calc_Microsec();
-  s.writeMicroseconds(Micros);
-  Serial.println(Micros);
-  Wait_for_new_val();
-  delay(10);
+  else if (Input == -1)
+  {
+    Serial.println("Detached current channel.");
+    selected_port = -1;
+  }
+
+  else if (selected_port != -1 and Input != -1)
+  {
+    int Var_for_Calc = Input;
+    Serial.print("Driving Servo to pulse_length: ");
+    Serial.println(String(Input));
+    if (Input > last_pwm)
+    {
+      Serial.println("Driving servo forward...");
+      for (uint16_t pulse = last_pwm; pulse < Input; pulse++)
+      {
+        //pwm.writeMicroseconds(selected_port, pulse);
+        pwm.setPWM(selected_port, 0, pulse);
+      }
+    }
+
+    else if (Input < last_pwm)
+    {
+      Serial.println("Driving servo backward...");
+      for (uint16_t pulse = last_pwm; pulse > Input; pulse--)
+      {
+        //pwm.writeMicroseconds(selected_port, pulse);
+        pwm.setPWM(selected_port, 0, pulse);
+        //delay(20);
+      }
+    }
+    Serial.println("finished.");
+    int servoEasepwm = ((int32_t) Var_for_Calc * (16666 / 32)) / (4096 / 32);
+    Serial.print("Servo-Ease signal:");
+    Serial.println(String(servoEasepwm));
+    last_pwm = Input;
+
+  }
+  else
+  {
+    Serial.println("No valid input, please try again.");
+  }
+
+
 
 }
